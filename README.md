@@ -9,8 +9,6 @@ A high-performance distributed key-value store built using the **Raft consensus 
 ✔ SQLite-backed persistence
 ✔ **6,739 ops/sec throughput (~35% above requirement)**
 
-👉 Meets and exceeds all assignment requirements.
-
 ---
 
 ## 🚀 Overview
@@ -41,14 +39,14 @@ Leader → batches multiple requests
 ## ⚙️ Running a 3-Node Cluster
 
 ```bash
-go build -o raft-kv .
+go build -o app.exe main.go
 
 # Leader
-./raft-kv --id=node1 --http=localhost:8001 --raft=localhost:9001
+app.exe --id=node1 --http=127.0.0.1:8001 --raft=127.0.0.1:9001
 
 # Followers
-./raft-kv --id=node2 --http=localhost:8002 --raft=localhost:9002 --join=localhost:8001
-./raft-kv --id=node3 --http=localhost:8003 --raft=localhost:9003 --join=localhost:8001
+app.exe --id=node2 --http=127.0.0.1:8002 --raft=127.0.0.1:9002
+app.exe --id=node3 --http=127.0.0.1:8003 --raft=127.0.0.1:9003
 ```
 
 ---
@@ -258,13 +256,5 @@ raft-kv/
 * No dynamic cluster membership
 * No failure injection testing
 * Snapshot tuning not optimized for large scale
-
----
-
-## 🧾 Assumptions
-
-* Static 3-node cluster
-* Local deployment environment
-* No network partition simulation
 
 ---
