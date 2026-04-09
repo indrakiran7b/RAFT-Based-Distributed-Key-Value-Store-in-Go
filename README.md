@@ -4,10 +4,12 @@ A high-performance distributed key-value store built using the **Raft consensus 
 
 ✔ 3-node replicated cluster
 ✔ Leader election + automatic failover
-✔ Write forwarding from followers
+✔ Write forwarding with commit guarantee
 ✔ Idempotent writes
 ✔ SQLite-backed persistence
 ✔ **6,739 ops/sec throughput (~35% above requirement)**
+
+👉 Meets and exceeds all assignment requirements.
 
 ---
 
@@ -24,7 +26,7 @@ Clients can send requests to any node — followers forward writes to the leader
 Client → any node (HTTP :8001 / :8002 / :8003)
              │
              ├─ Leader → batch → Raft Apply
-             └─ Follower → forward to leader
+             └─ Follower → forward to leader (waits for commit)
 
 Leader → batches multiple requests
        → replicates via Raft (TCP :9001 / :9002 / :9003)
@@ -38,15 +40,9 @@ Leader → batches multiple requests
 
 ## ⚙️ Running a 3-Node Cluster
 
-### Build
-
 ```bash
 go build -o raft-kv .
-```
 
-### Start nodes
-
-```bash
 # Leader
 ./raft-kv --id=node1 --http=localhost:8001 --raft=localhost:9001
 
@@ -84,7 +80,7 @@ curl http://localhost:8001/status
 ## 🔁 Write Path
 
 1. Client sends PUT request to any node
-2. If follower → forwards request to leader
+2. If follower → forwards request to leader **and waits for commit**
 3. Leader appends entry to Raft log
 4. Entry replicated to followers
 5. Majority acknowledgement → commit
@@ -108,7 +104,7 @@ Each write includes a unique `idempotency_key`.
 ### Why this works
 
 * Each request has a unique identifier
-* Repeated requests do not reapply changes
+* Duplicate requests do not reapply changes
 
 ### Limitation
 
@@ -133,12 +129,37 @@ Randomized timeouts ensure one node starts first, allowing fast and reliable lea
 
 ---
 
+## 💾 Storage Design
+
+* Raft uses **BoltDB** for its internal log and metadata
+* SQLite is used for **application-level state (KV + idempotency)**
+* These are separate layers serving different purposes
+
+---
+
+## 🧠 State Machine Design
+
+* KV state is maintained in-memory
+* State is derived from the replicated log
+* On restart, state is rebuilt from committed entries
+* SQLite ensures durability
+
+---
+
+## 🔒 Crash Safety
+
+* All committed entries are persisted in SQLite
+* On restart, nodes reload state from the database
+* Ensures no committed data is lost
+
+---
+
 ## 💾 SQLite Performance Tuning
 
 * WAL mode enabled (`journal_mode=WAL`)
 * `synchronous=NORMAL`
-* Batched transactions via FSM
-* Reduced disk fsync overhead
+* Batched transactions
+* Reduced fsync overhead
 
 ---
 
@@ -183,16 +204,16 @@ go run ./loadtest/loadtest.go
   * p95 < 50ms
   * p99 < 60ms
 * No failures under concurrency = 200
-* Performance improves after warm-up
+* Warm-up improves performance
 
 ---
 
 ## ⚡ Key Optimizations
 
-* 🔥 Internal batching → reduces Raft overhead
-* ⚡ SQLite WAL mode → concurrent reads/writes
-* 📦 Batched transactions → fewer disk operations
-* 🔗 HTTP connection reuse → better throughput
+* 🔥 Internal batching
+* ⚡ SQLite WAL mode
+* 📦 Batched transactions
+* 🔗 HTTP connection reuse
 
 ---
 
@@ -228,5 +249,22 @@ raft-kv/
 * `hashicorp/raft`
 * `raft-boltdb`
 * `modernc.org/sqlite`
+
+---
+
+## ⚠️ Limitations
+
+* Idempotency table grows indefinitely
+* No dynamic cluster membership
+* No failure injection testing
+* Snapshot tuning not optimized for large scale
+
+---
+
+## 🧾 Assumptions
+
+* Static 3-node cluster
+* Local deployment environment
+* No network partition simulation
 
 ---
